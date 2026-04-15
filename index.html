@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Real-time Bangla Sign Language Recognition">
+    <title>🤟 Bangla Sign Language Recognition</title>
+    <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+    <div class="container">
+        <!-- Header -->
+        <header class="header">
+            <h1>🤟 Bangla Sign Language Recognition</h1>
+            <p class="subtitle">Real-time gesture detection using hand keypoints</p>
+        </header>
+
+        <!-- Status -->
+        <div class="status" id="status">
+            <span id="statusText">Loading model...</span>
+            <span id="statusIcon">⏳</span>
+        </div>
+
+        <!-- Main Content -->
+        <div class="content">
+            <!-- Video Section -->
+            <div class="video-section">
+                <div class="video-container">
+                    <video id="video" autoplay playsinline></video>
+                    <div class="overlay" id="overlay">
+                        <div class="overlay-text">Position your hand in frame</div>
+                    </div>
+                </div>
+
+                <!-- Controls -->
+                <div class="controls">
+                    <button class="btn btn-primary" onclick="startCamera()" id="startBtn">
+                        <span class="btn-icon">📷</span> Start Camera
+                    </button>
+                    <button class="btn btn-danger" onclick="stopCamera()" id="stopBtn" disabled>
+                        <span class="btn-icon">⛔</span> Stop Camera
+                    </button>
+                </div>
+
+                <!-- Info Box -->
+                <div class="info-box">
+                    <p><strong>💡 Tips:</strong></p>
+                    <ul>
+                        <li>Ensure good lighting</li>
+                        <li>Keep hand clearly visible</li>
+                        <li>Show gestures slowly and clearly</li>
+                        <li>One or two hands supported</li>
+                    </ul>
+                </div>
+            </div>
+
+            <!-- Results Section -->
+            <div class="results-section">
+                <!-- Current Prediction -->
+                <div class="result-box">
+                    <h2>Current Prediction</h2>
+                    <div class="gesture-display">
+                        <div class="gesture-name" id="gestureName">Waiting...</div>
+                        <div class="confidence-bar">
+                            <div class="confidence-fill" id="confidenceFill"></div>
+                        </div>
+                        <div class="confidence-text" id="confidenceText">Confidence: --</div>
+                    </div>
+                </div>
+
+                <!-- Statistics -->
+                <div class="stats-section">
+                    <h3>📊 Statistics</h3>
+                    <div class="stats-grid">
+                        <div class="stat-card">
+                            <div class="stat-icon">⚡</div>
+                            <div class="stat-value" id="fpsCount">0</div>
+                            <div class="stat-label">FPS</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-icon">🎯</div>
+                            <div class="stat-value" id="detections">0</div>
+                            <div class="stat-label">Detections</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-icon">📈</div>
+                            <div class="stat-value" id="avgConfidence">0%</div>
+                            <div class="stat-label">Avg Confidence</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-icon">⏱️</div>
+                            <div class="stat-value" id="inference">0ms</div>
+                            <div class="stat-label">Inference Time</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- History -->
+                <div class="history-section">
+                    <h3>📝 Detection History (Last 15)</h3>
+                    <div class="history" id="history">
+                        <div class="history-empty">No detections yet</div>
+                    </div>
+                </div>
+
+                <!-- Top Predictions -->
+                <div class="top-predictions">
+                    <h3>🏆 Top 3 Predictions</h3>
+                    <div id="topPredictions">
+                        <div class="top-pred-item">
+                            <span>--</span>
+                            <div class="top-pred-bar">
+                                <div class="top-pred-fill" style="width: 0%"></div>
+                            </div>
+                            <span>--%</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Footer -->
+        <footer class="footer">
+            <p>Built with MediaPipe Hand Landmarker and Pure JS Inference</p>
+            <p>Model Accuracy: 92% | Classes: 60 Gestures</p>
+        </footer>
+    </div>
+
+    <!-- Loading Indicator -->
+    <div class="loading-spinner" id="loadingSpinner">
+        <div class="spinner"></div>
+    </div>
+
+    <!-- Scripts -->
+    <!-- Load MediaPipe as ES module and expose to window -->
+    <script type="module">
+        import { HandLandmarker, FilesetResolver } from
+            "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/vision_bundle.mjs";
+        window.HandLandmarker = HandLandmarker;
+        window.FilesetResolver = FilesetResolver;
+        // Signal that MediaPipe is ready
+        window.dispatchEvent(new Event('mediapipe-ready'));
+    </script>
+
+    <!-- App scripts (loaded as regular scripts, wait for MediaPipe) -->
+    <script src="js/config.js"></script>
+    <script src="js/utils.js"></script>
+    <script src="js/inference.js"></script>
+</body>
+</html>

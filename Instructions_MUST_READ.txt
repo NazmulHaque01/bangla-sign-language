@@ -1,0 +1,21 @@
+MediaPipe Tasks + Hand Keypoints + Dense NN   Web Implementation for Testing
+
+
+follow the .md file to implement the new model
+
+
+OPEN 		CMD 		in project folder
+
+
+then run 			python -m http.server 8000
+
+you must have python installed in your device
+
+goto 		http://localhost:8000/ 		in your browser
+
+
+press Ctrl + C in cmd to stop the server
+
+
+Use this to start server reliably:
+powershell -ExecutionPolicy Bypass -File "C:\Users\naiem\OneDrive\Desktop\bangla_sign_web_medipipe_denseNN - Complete\start_server.ps1"
