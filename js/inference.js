@@ -372,7 +372,7 @@ function trackSustainedSign(gesture, confidence) {
             // Calculate average confidence over the sustained period
             const avgConfidence = currentSignConfidences.reduce((a, b) => a + b, 0) / currentSignConfidences.length;
 
-            if (avgConfidence >= 0.90) {
+            if (avgConfidence >= 0.86) {
                 // Only add if it's not the same as the last word in the sentence
                 const lastWord = sentenceWords.length > 0 ? sentenceWords[sentenceWords.length - 1] : null;
 
