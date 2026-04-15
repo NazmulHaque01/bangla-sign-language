@@ -9,15 +9,12 @@ let video = null;
 let isRunning = false;
 let lastVideoTime = -1;
 
-// Statistics
-let stats = {
-    frameCount: 0,
-    detections: 0,
-    confidences: [],
-    inferenceTimes: [],
-    startTime: 0,
-    lastUpdateTime: 0
-};
+// Sentence tracking state
+let sentenceWords = [];          // Array of words in the sentence (max 10)
+let currentSign = null;          // Currently detected sign name
+let currentSignStartTime = 0;    // When this sign was first detected continuously
+let currentSignConfidences = []; // Confidence values during sustained detection
+let handDetected = false;        // Whether a hand is currently in frame
 
 // ============================================================================
 // PURE JS NEURAL NETWORK INFERENCE
@@ -250,14 +247,21 @@ async function startCamera() {
             video.play();
             isRunning = true;
             lastVideoTime = -1;
-            stats.startTime = Date.now();
-            stats.frameCount = 0;
+
+            // Reset sentence tracking
+            currentSign = null;
+            currentSignStartTime = 0;
+            currentSignConfidences = [];
+            handDetected = false;
 
             // Update UI
             document.getElementById('startBtn').disabled = true;
             document.getElementById('stopBtn').disabled = false;
 
-            updateStatus('Camera active. Show your hand gestures!', 'ready');
+            // Show "no hand" state initially
+            showNoHandState();
+
+            updateStatus('Camera active — show your hand gestures!', 'ready');
             Utils.log('Camera started', 'success');
 
             // Start inference loop
@@ -298,11 +302,7 @@ function stopCamera() {
 async function inferenceLoop() {
     if (!isRunning || !handLandmarker || !video) return;
 
-    stats.frameCount++;
-
     try {
-        const startTime = performance.now();
-
         // Only run detection when we have a new video frame
         const currentTime = video.currentTime;
         if (currentTime !== lastVideoTime) {
@@ -317,32 +317,31 @@ async function inferenceLoop() {
                 keypoints = Utils.extractKeypoints(results.landmarks);
             }
 
-            // Predict gesture
             if (keypoints) {
+                // Hand is detected
+                if (!handDetected) {
+                    handDetected = true;
+                }
+
                 const prediction = predictGesture(keypoints);
 
                 if (prediction && prediction.confidence >= CONFIG.INFERENCE.minConfidence) {
-                    stats.detections++;
-                    stats.confidences.push(prediction.confidence);
-
-                    const inferenceTime = performance.now() - startTime;
-                    stats.inferenceTimes.push(inferenceTime);
-
-                    // Update UI
+                    // Update the current prediction display
                     updatePredictionDisplay(prediction);
-                    addToHistory(prediction.gesture, prediction.confidence);
-                    updateTopPredictions(prediction.allPredictions);
 
-                    // Log
-                    Utils.log(`Detected: ${prediction.gesture} (${Utils.formatConfidence(prediction.confidence)})`, 'success');
+                    // Track sustained detection for sentence building
+                    trackSustainedSign(prediction.gesture, prediction.confidence);
                 }
+            } else {
+                // No hand detected
+                if (handDetected || currentSign !== null) {
+                    handDetected = false;
+                    currentSign = null;
+                    currentSignStartTime = 0;
+                    currentSignConfidences = [];
+                }
+                showNoHandState();
             }
-        }
-
-        // Update statistics periodically
-        if (Date.now() - stats.lastUpdateTime > CONFIG.UI.fpsUpdateInterval) {
-            updateStatistics();
-            stats.lastUpdateTime = Date.now();
         }
 
     } catch (error) {
@@ -352,6 +351,47 @@ async function inferenceLoop() {
 
     if (isRunning) {
         requestAnimationFrame(inferenceLoop);
+    }
+}
+
+/**
+ * Track a sign being held for sustained detection.
+ * Only adds to sentence if held for >= 1 second with >= 90% avg confidence.
+ */
+function trackSustainedSign(gesture, confidence) {
+    const now = Date.now();
+
+    if (gesture === currentSign) {
+        // Same sign continues — accumulate confidence
+        currentSignConfidences.push(confidence);
+
+        const duration = now - currentSignStartTime;
+
+        // Check if held long enough (1 second)
+        if (duration >= 1000) {
+            // Calculate average confidence over the sustained period
+            const avgConfidence = currentSignConfidences.reduce((a, b) => a + b, 0) / currentSignConfidences.length;
+
+            if (avgConfidence >= 0.90) {
+                // Only add if it's not the same as the last word in the sentence
+                const lastWord = sentenceWords.length > 0 ? sentenceWords[sentenceWords.length - 1] : null;
+
+                if (gesture !== lastWord) {
+                    addWordToSentence(gesture);
+                    Utils.log(`Word added to sentence: ${gesture} (avg confidence: ${(avgConfidence * 100).toFixed(1)}%)`, 'success');
+                }
+            }
+
+            // Reset tracking so it doesn't keep triggering every frame
+            // but keep the same sign tracked (prevents re-adding)
+            currentSignStartTime = now;
+            currentSignConfidences = [confidence];
+        }
+    } else {
+        // Different sign detected — reset tracking
+        currentSign = gesture;
+        currentSignStartTime = now;
+        currentSignConfidences = [confidence];
     }
 }
 
@@ -401,6 +441,20 @@ function predictGesture(keypoints) {
 // ============================================================================
 
 /**
+ * Show "no hand detected" state
+ */
+function showNoHandState() {
+    const gestureName = document.getElementById('gestureName');
+    const confidence = document.getElementById('confidenceText');
+    const confidenceFill = document.getElementById('confidenceFill');
+
+    gestureName.textContent = '✋ Show your hand to start';
+    gestureName.classList.add('no-hand');
+    confidence.textContent = 'Confidence: --';
+    confidenceFill.style.width = '0%';
+}
+
+/**
  * Update prediction display
  */
 function updatePredictionDisplay(prediction) {
@@ -409,8 +463,11 @@ function updatePredictionDisplay(prediction) {
     const confidenceFill = document.getElementById('confidenceFill');
 
     gestureName.textContent = prediction.gesture;
-    confidence.textContent = `Confidence: ${Utils.formatConfidence(prediction.confidence)}`;
-    confidenceFill.style.width = (prediction.confidence * 100) + '%';
+    gestureName.classList.remove('no-hand');
+
+    const pct = prediction.confidence * 100;
+    confidence.textContent = `Confidence: ${pct.toFixed(1)}%`;
+    confidenceFill.style.width = pct.toFixed(1) + '%';
 
     // Color based on confidence
     if (prediction.confidence > 0.8) {
@@ -423,76 +480,61 @@ function updatePredictionDisplay(prediction) {
 }
 
 /**
- * Add detection to history
+ * Add a word to the sentence box
  */
-function addToHistory(gesture, confidence) {
-    const history = document.getElementById('history');
+function addWordToSentence(word) {
+    sentenceWords.push(word);
 
-    // Remove empty message if exists
-    const emptyMsg = history.querySelector('.history-empty');
-    if (emptyMsg) {
-        emptyMsg.remove();
+    // Keep only last 10 words
+    if (sentenceWords.length > 10) {
+        sentenceWords.shift();
     }
 
-    // Create new item
-    const item = document.createElement('div');
-    item.className = 'history-item';
-    item.innerHTML = `
-        <span class="gesture">${gesture}</span>
-        <span class="confidence">${Utils.formatConfidence(confidence)}</span>
-        <span class="time">${Utils.formatTime()}</span>
-    `;
-
-    history.insertBefore(item, history.firstChild);
-
-    // Keep only last N items
-    while (history.children.length > CONFIG.UI.maxHistoryItems) {
-        history.removeChild(history.lastChild);
-    }
+    renderSentence();
 }
 
 /**
- * Update top predictions
+ * Clear the sentence
  */
-function updateTopPredictions(allPredictions) {
-    const topContainer = document.getElementById('topPredictions');
-    const topPreds = Utils.getTopPredictions(allPredictions, labels, 3);
+function clearSentence() {
+    sentenceWords = [];
+    renderSentence();
+    Utils.log('Sentence cleared', 'info');
+}
 
-    topContainer.innerHTML = '';
+/**
+ * Render the sentence box from the sentenceWords array
+ */
+function renderSentence() {
+    const box = document.getElementById('sentenceBox');
+    const placeholder = document.getElementById('sentencePlaceholder');
 
-    topPreds.forEach((pred, idx) => {
-        const item = document.createElement('div');
-        item.className = 'top-pred-item';
-        item.innerHTML = `
-            <span>${idx + 1}. ${pred.label}</span>
-            <div class="top-pred-bar">
-                <div class="top-pred-fill" style="width: ${pred.confidence * 100}%"></div>
-            </div>
-            <span>${Utils.formatConfidence(pred.confidence)}</span>
-        `;
-        topContainer.appendChild(item);
+    // Clear existing words (but keep placeholder reference)
+    box.innerHTML = '';
+
+    if (sentenceWords.length === 0) {
+        const ph = document.createElement('div');
+        ph.className = 'sentence-placeholder';
+        ph.id = 'sentencePlaceholder';
+        ph.textContent = 'Detected words will appear here...';
+        box.appendChild(ph);
+        return;
+    }
+
+    sentenceWords.forEach((word, index) => {
+        const span = document.createElement('span');
+        span.className = 'sentence-word';
+        span.textContent = word;
+
+        // Only animate the last (newest) word
+        if (index === sentenceWords.length - 1) {
+            span.style.animation = 'wordPop 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275)';
+        } else {
+            span.style.animation = 'none';
+        }
+
+        box.appendChild(span);
     });
-}
-
-/**
- * Update statistics
- */
-function updateStatistics() {
-    const elapsed = (Date.now() - stats.startTime) / 1000;
-    const fps = stats.frameCount / elapsed;
-
-    Utils.updateElement('fpsCount', fps.toFixed(1));
-    Utils.updateElement('detections', stats.detections);
-
-    if (stats.confidences.length > 0) {
-        const avgConf = stats.confidences.reduce((a, b) => a + b) / stats.confidences.length;
-        Utils.updateElement('avgConfidence', (avgConf * 100).toFixed(0) + '%');
-    }
-
-    if (stats.inferenceTimes.length > 0) {
-        const avgInference = stats.inferenceTimes.reduce((a, b) => a + b) / stats.inferenceTimes.length;
-        Utils.updateElement('inference', avgInference.toFixed(1) + 'ms');
-    }
 }
 
 /**
