@@ -26,7 +26,7 @@ const CONFIG = {
         minConfidence: 0.3,
         updateFrequency: 1,  // Update every N frames
         sustainedDuration: 1000, // ms (1 second)
-        sustainedConfidence: 0.80 // Average confidence required to commit a sign
+        sustainedConfidence: 0.86 // Average confidence required to commit a sign
     },
 
     // UI settings
