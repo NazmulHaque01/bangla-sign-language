@@ -5,6 +5,7 @@ let model = null;
 let scaler = null;
 let labels = null;
 let handLandmarker = null;
+let poseLandmarker = null;
 let video = null;
 let isRunning = false;
 let lastVideoTime = -1;
@@ -95,7 +96,7 @@ class SimpleModel {
  */
 function waitForMediaPipe(timeout = 30000) {
     return new Promise((resolve, reject) => {
-        if (window.FilesetResolver && window.HandLandmarker) {
+        if (window.FilesetResolver && window.HandLandmarker && window.PoseLandmarker) {
             resolve();
             return;
         }
@@ -136,7 +137,7 @@ async function initializeApp() {
         await loadLabels();
 
         // Initialize MediaPipe Hand Landmarker
-        await initializeHandLandmarker();
+        await initializeLandmarkers();
 
         Utils.log('Initialization complete!', 'success');
         updateStatus('Ready! Click "Start Camera" to begin', 'ready');
@@ -197,16 +198,15 @@ async function loadLabels() {
 /**
  * Initialize MediaPipe Hand Landmarker
  */
-async function initializeHandLandmarker() {
+async function initializeLandmarkers() {
     try {
-        Utils.log('Initializing MediaPipe Hand Landmarker...', 'info');
+        Utils.log('Initializing MediaPipe Landmarkers...', 'info');
 
-        // FilesetResolver and HandLandmarker are exposed on window by
-        // the ES module script in index.html
         const vision = await window.FilesetResolver.forVisionTasks(
             'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/wasm'
         );
 
+        // Hand Landmarker
         handLandmarker = await window.HandLandmarker.createFromOptions(vision, {
             baseOptions: {
                 modelAssetPath: CONFIG.HAND_LANDMARKER.modelAssetPath,
@@ -218,10 +218,22 @@ async function initializeHandLandmarker() {
             minTrackingConfidence: CONFIG.HAND_LANDMARKER.minTrackingConfidence
         });
 
-        Utils.log('Hand Landmarker initialized', 'success');
+        // Pose Landmarker
+        poseLandmarker = await window.PoseLandmarker.createFromOptions(vision, {
+            baseOptions: {
+                modelAssetPath: CONFIG.POSE_LANDMARKER.modelAssetPath,
+                delegate: 'GPU'
+            },
+            runningMode: 'VIDEO',
+            minPoseDetectionConfidence: CONFIG.POSE_LANDMARKER.minDetectionConfidence,
+            minPosePresenceConfidence: CONFIG.POSE_LANDMARKER.minTrackingConfidence,
+            outputSegmentationMasks: false
+        });
+
+        Utils.log('Landmarkers initialized', 'success');
     } catch (error) {
-        console.error('Hand Landmarker init error:', error);
-        throw new Error(`Failed to initialize Hand Landmarker: ${error.message}`);
+        console.error('Landmarker init error:', error);
+        throw new Error(`Failed to initialize Landmarkers: ${error.message}`);
     }
 }
 
@@ -300,7 +312,7 @@ function stopCamera() {
  * Main inference loop
  */
 async function inferenceLoop() {
-    if (!isRunning || !handLandmarker || !video) return;
+    if (!isRunning || !handLandmarker || !poseLandmarker || !video) return;
 
     try {
         // Only run detection when we have a new video frame
@@ -308,13 +320,15 @@ async function inferenceLoop() {
         if (currentTime !== lastVideoTime) {
             lastVideoTime = currentTime;
 
-            // Detect hands
-            const results = handLandmarker.detectForVideo(video, performance.now());
+            // Detect hands and pose
+            const handResults = handLandmarker.detectForVideo(video, performance.now());
+            const poseResults = poseLandmarker.detectForVideo(video, performance.now());
 
             // Extract keypoints
             let keypoints = null;
-            if (results.landmarks && results.landmarks.length > 0) {
-                keypoints = Utils.extractKeypoints(results.landmarks);
+            if (handResults.landmarks && handResults.landmarks.length > 0) {
+                // Pass both Hand and Pose landmarks to our new util function!
+                keypoints = Utils.extractKeypoints(handResults.landmarks, poseResults.landmarks);
             }
 
             if (keypoints) {
@@ -367,12 +381,12 @@ function trackSustainedSign(gesture, confidence) {
 
         const duration = now - currentSignStartTime;
 
-        // Check if held long enough (1 second)
-        if (duration >= 1000) {
+        // Check if held long enough
+        if (duration >= CONFIG.INFERENCE.sustainedDuration) {
             // Calculate average confidence over the sustained period
             const avgConfidence = currentSignConfidences.reduce((a, b) => a + b, 0) / currentSignConfidences.length;
 
-            if (avgConfidence >= 0.86) {
+            if (avgConfidence >= CONFIG.INFERENCE.sustainedConfidence) {
                 // Only add if it's not the same as the last word in the sentence
                 const lastWord = sentenceWords.length > 0 ? sentenceWords[sentenceWords.length - 1] : null;
 
