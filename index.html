@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -7,6 +8,7 @@
     <title>🤟 Bangla Sign Language Recognition</title>
     <link rel="stylesheet" href="css/style.css">
 </head>
+
 <body>
     <div class="container">
         <!-- Header -->
@@ -61,7 +63,8 @@
                 <div class="sentence-section">
                     <h3>📝 Detected Sentence</h3>
                     <div class="sentence-box" id="sentenceBox">
-                        <div class="sentence-placeholder" id="sentencePlaceholder">Detected words will appear here...</div>
+                        <div class="sentence-placeholder" id="sentencePlaceholder">Detected words will appear here...
+                        </div>
                     </div>
                     <div class="sentence-actions">
                         <button class="btn btn-clear" onclick="clearSentence()" id="clearSentenceBtn">
@@ -87,9 +90,10 @@
     <!-- Scripts -->
     <!-- Load MediaPipe as ES module and expose to window -->
     <script type="module">
-        import { HandLandmarker, FilesetResolver } from
+        import { HandLandmarker, PoseLandmarker, FilesetResolver } from
             "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/vision_bundle.mjs";
         window.HandLandmarker = HandLandmarker;
+        window.PoseLandmarker = PoseLandmarker;
         window.FilesetResolver = FilesetResolver;
         // Signal that MediaPipe is ready
         window.dispatchEvent(new Event('mediapipe-ready'));
@@ -100,4 +104,5 @@
     <script src="js/utils.js"></script>
     <script src="js/inference.js"></script>
 </body>
+
 </html>

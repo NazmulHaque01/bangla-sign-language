@@ -1,0 +1,25 @@
+# OS files
+.DS_Store
+Thumbs.db
+
+# Node.js
+node_modules/
+package-lock.json
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+env/
+venv/
+
+# Large model artifacts (not needed for web deployment)
+*.pkl
+*.tflite
+*.h5
+*.keras
+
+# Local config/logs
+.env
+*.log
